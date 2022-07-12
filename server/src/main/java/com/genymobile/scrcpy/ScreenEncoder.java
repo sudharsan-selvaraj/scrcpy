@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -93,7 +94,7 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
     private void internalStreamScreen() throws IOException {
         updateFormat();
         connection.setStreamInvalidateListener(this);
-        boolean alive;
+        boolean alive = true;
         try {
             do {
                 MediaCodec codec = createCodec(videoSettings.getEncoderName());
@@ -116,7 +117,11 @@ public class ScreenEncoder implements Connection.StreamInvalidateListener, Runna
                     alive = encode(codec);
                     // do not call stop() on exception, it would trigger an IllegalStateException
                     codec.stop();
-                } finally {
+                }  catch (Exception e) {
+                    Ln.e(e.getMessage());
+                    continue;
+                }
+                finally {
                     destroyDisplay(display);
                     codec.release();
                     surface.release();

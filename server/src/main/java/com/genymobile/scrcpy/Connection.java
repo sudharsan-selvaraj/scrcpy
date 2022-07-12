@@ -24,6 +24,10 @@ public abstract class Connection implements Device.RotationListener, Device.Clip
 
     abstract void send(ByteBuffer data);
 
+    public void send(DeviceMessage msg){
+
+    }
+
     abstract void sendDeviceMessage(DeviceMessage msg) throws IOException;
 
     abstract void close() throws Exception;

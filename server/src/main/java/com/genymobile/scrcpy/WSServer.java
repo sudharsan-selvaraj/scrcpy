@@ -1,5 +1,8 @@
 package com.genymobile.scrcpy;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+
 import org.java_websocket.WebSocket;
 import org.java_websocket.framing.CloseFrame;
 import org.java_websocket.handshake.ClientHandshake;
@@ -15,9 +18,11 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 
 public class WSServer extends WebSocketServer {
     private static final String PID_FILE_PATH = "/data/local/tmp/ws_scrcpy.pid";
+
     public static final class SocketInfo {
         private static final HashSet<Short> INSTANCES_BY_ID = new HashSet<>();
         private final short id;
@@ -55,7 +60,7 @@ public class WSServer extends WebSocketServer {
         }
     }
 
-    protected final ControlMessageReader reader = new ControlMessageReader();
+    protected final ControlMessageReaderJson reader = new ControlMessageReaderJson();
     private final Options options;
     private static final HashMap<Integer, WebSocketConnection> STREAM_BY_DISPLAY_ID = new HashMap<>();
 
@@ -83,7 +88,7 @@ public class WSServer extends WebSocketServer {
     @Override
     public void onClose(WebSocket webSocket, int code, String reason, boolean remote) {
         Ln.d("Client has left the room!");
-        FilePushHandler.cancelAllForConnection(webSocket);
+        //FilePushHandler.cancelAllForConnection(webSocket);
         SocketInfo socketInfo = webSocket.getAttachment();
         if (socketInfo != null) {
             WebSocketConnection connection = socketInfo.getConnection();
@@ -97,42 +102,69 @@ public class WSServer extends WebSocketServer {
     @Override
     public void onMessage(WebSocket webSocket, String message) {
         String address = webSocket.getRemoteSocketAddress().getAddress().getHostAddress();
-        Ln.w("?  Client from " + address + " says: \"" + message + "\"");
-    }
-
-    @Override
-    public void onMessage(WebSocket webSocket, ByteBuffer message) {
         SocketInfo socketInfo = webSocket.getAttachment();
         if (socketInfo == null) {
             Ln.e("No info attached to connection");
             return;
         }
+        Ln.i(message);
         WebSocketConnection connection = socketInfo.getConnection();
-        String address = webSocket.getRemoteSocketAddress().getAddress().getHostAddress();
-        ControlMessage controlMessage = reader.parseEvent(message);
-        if (controlMessage != null) {
-            if (controlMessage.getType() == ControlMessage.TYPE_PUSH_FILE) {
-                FilePushHandler.handlePush(webSocket, controlMessage);
-                return;
-            }
-            if (controlMessage.getType() == ControlMessage.TYPE_CHANGE_STREAM_PARAMETERS) {
-                VideoSettings videoSettings = controlMessage.getVideoSettings();
-                int displayId = videoSettings.getDisplayId();
+        ObjectReader objectReader = new ObjectMapper().readerFor(Map.class);
+        try {
+            Map<String, String> parseMessage = objectReader.readValue(message);
+            if (parseMessage.get("message") != null && parseMessage.get("message").equals("start")) {
+                VideoSettings videoSettings = new VideoSettings();
+                videoSettings.setDisplayId(0);
+                videoSettings.setSendFrameMeta(false);
+                   joinStreamForDisplayId(webSocket, videoSettings, options, videoSettings.getDisplayId(), this);
+                   return;
+            } else {
+                ControlMessage controlMessage = reader.parseEvent(parseMessage);
                 if (connection != null) {
-                    if (connection.getVideoSettings().getDisplayId() != displayId) {
-                        connection.leave(webSocket);
-                    }
+                    Controller controller = connection.getController();
+                    controller.handleEvent(controlMessage);
                 }
-                joinStreamForDisplayId(webSocket, videoSettings, options, displayId, this);
-                return;
             }
-            if (connection != null) {
-                Controller controller = connection.getController();
-                controller.handleEvent(controlMessage);
-            }
-        } else {
-            Ln.w("?  Client from " + address + " sends bytes: " + message);
+
+
+        } catch (Exception e) {
+            Ln.i(e.getMessage());
         }
+    }
+
+    @Override
+    public void onMessage(WebSocket webSocket, ByteBuffer message) {
+//        SocketInfo socketInfo = webSocket.getAttachment();
+//        if (socketInfo == null) {
+//            Ln.e("No info attached to connection");
+//            return;
+//        }
+//        WebSocketConnection connection = socketInfo.getConnection();
+//        String address = webSocket.getRemoteSocketAddress().getAddress().getHostAddress();
+//        ControlMessage controlMessage = reader.parseEvent(message);
+//        if (controlMessage != null) {
+//            if (controlMessage.getType() == ControlMessage.TYPE_PUSH_FILE) {
+//                FilePushHandler.handlePush(webSocket, controlMessage);
+//                return;
+//            }
+//            if (controlMessage.getType() == ControlMessage.TYPE_CHANGE_STREAM_PARAMETERS) {
+//                VideoSettings videoSettings = controlMessage.getVideoSettings();
+//                int displayId = videoSettings.getDisplayId();
+//                if (connection != null) {
+//                    if (connection.getVideoSettings().getDisplayId() != displayId) {
+//                        connection.leave(webSocket);
+//                    }
+//                }
+//                joinStreamForDisplayId(webSocket, videoSettings, options, displayId, this);
+//                return;
+//            }
+//            if (connection != null) {
+//                Controller controller = connection.getController();
+//                controller.handleEvent(controlMessage);
+//            }
+//        } else {
+//            Ln.w("?  Client from " + address + " sends bytes: " + message);
+//        }
     }
 
     @Override
@@ -197,6 +229,7 @@ public class WSServer extends WebSocketServer {
     }
 
     public static void releaseConnectionForDisplay(int displayId) {
+        STREAM_BY_DISPLAY_ID.get(displayId).getDevice().release();
         STREAM_BY_DISPLAY_ID.remove(displayId);
     }
 
@@ -205,7 +238,7 @@ public class WSServer extends WebSocketServer {
         if (webSockets.isEmpty()) {
             return;
         }
-        ByteBuffer initialInfo = WebSocketConnection.getInitialInfo();
+        HashMap<String, Object> initialInfo = WebSocketConnection.getInitialInfo();
         for (WebSocket webSocket : webSockets) {
             SocketInfo socketInfo = webSocket.getAttachment();
             if (socketInfo == null) {

@@ -138,6 +138,7 @@ public final class Device {
 
     public synchronized void setScreenInfo(ScreenInfo screenInfo) {
         this.screenInfo = screenInfo;
+        Ln.i("Changing screen info to " +screenInfo.getVideoSize().toString());
     }
 
     public Point getPhysicalPoint(Position position) {
@@ -277,12 +278,15 @@ public final class Device {
             }
             this.clipboardListener = null;
         }
-        if (rotationWatcher != null) {
-            SERVICE_MANAGER.getWindowManager().unregisterRotationWatcher(rotationWatcher);
-            rotationWatcher = null;
-        }
+//        if (rotationWatcher != null) {
+//            SERVICE_MANAGER.getWindowManager().unregisterRotationWatcher(rotationWatcher);
+//            rotationWatcher = null;
+//        }
+
         this.rotationListener = null;
         this.clipboardListener = null;
+
+        Ln.i("Releasing device listeners");
     }
 
     /**

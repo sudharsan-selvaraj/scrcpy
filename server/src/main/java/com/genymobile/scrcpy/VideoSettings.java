@@ -15,7 +15,7 @@ public class VideoSettings {
     private Size bounds;
     private int bitRate = DEFAULT_BIT_RATE;
     private int maxFps;
-    private int lockedVideoOrientation;
+    private int lockedVideoOrientation = -1;
     private byte iFrameInterval = DEFAULT_I_FRAME_INTERVAL;
     private Rect crop;
     private boolean sendFrameMeta; // send PTS so that the client may record properly

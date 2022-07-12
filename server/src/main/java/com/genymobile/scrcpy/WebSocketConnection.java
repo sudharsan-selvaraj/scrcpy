@@ -2,11 +2,14 @@ package com.genymobile.scrcpy;
 
 import android.media.MediaCodecInfo;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.java_websocket.WebSocket;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -51,7 +54,7 @@ public class WebSocketConnection extends Connection {
             Ln.d("Last client has left");
             this.release();
         }
-        wsServer.sendInitialInfoToAll();
+        //wsServer.sendInitialInfoToAll();
     }
 
     public static ByteBuffer deviceMessageToByteBuffer(DeviceMessage msg) {
@@ -59,6 +62,30 @@ public class WebSocketConnection extends Connection {
         buffer.put(MAGIC_BYTES_MESSAGE);
         buffer.rewind();
         return buffer;
+    }
+
+
+    @Override
+    public void send(DeviceMessage msg) {
+        if (sockets.isEmpty()) {
+            return;
+        }
+        synchronized (sockets) {
+            for (WebSocket webSocket : sockets) {
+                WSServer.SocketInfo info = webSocket.getAttachment();
+                if (!webSocket.isOpen() || info == null) {
+                    continue;
+                }
+                ObjectMapper mapper = new ObjectMapper();
+                try {
+                    String json = mapper.writeValueAsString(msg);
+                    webSocket.send(json);
+                } catch (Exception e) {
+                    Ln.e(e.getMessage());
+                }
+
+            }
+        }
     }
 
     @Override
@@ -77,16 +104,17 @@ public class WebSocketConnection extends Connection {
         }
     }
 
-    public static void sendInitialInfo(ByteBuffer initialInfo, WebSocket webSocket, int clientId) {
-        initialInfo.position(initialInfo.capacity() - 4);
-        initialInfo.putInt(clientId);
-        initialInfo.rewind();
-        webSocket.send(initialInfo);
+    public static void sendInitialInfo(HashMap initialInfo, WebSocket webSocket, int clientId) {
+        initialInfo.put("clientId", clientId);
+        ObjectMapper mapper = new ObjectMapper();
+        try {
+            webSocket.send(mapper.writeValueAsString(initialInfo));
+        } catch (Exception e) {}
     }
 
     public void sendDeviceMessage(DeviceMessage msg) {
-        ByteBuffer buffer = deviceMessageToByteBuffer(msg);
-        send(buffer);
+        //ByteBuffer buffer = deviceMessageToByteBuffer(msg);
+        send(msg);
     }
 
     @Override
@@ -112,87 +140,24 @@ public class WebSocketConnection extends Connection {
     }
 
     @SuppressWarnings("checkstyle:MagicNumber")
-    public static ByteBuffer getInitialInfo() {
-        int baseLength = MAGIC_BYTES_INITIAL.length
-                + DEVICE_NAME_FIELD_LENGTH
-                + 4                          // displays count
-                + 4;                         // client id
-        int additionalLength = 0;
+    public static HashMap<String, Object> getInitialInfo() {
+
+        HashMap<String, Object> initialInfo = new HashMap<String, Object>();
         int[] displayIds = Device.getDisplayIds();
         HashMap<Integer, DisplayInfo> displayInfoHashMap = new HashMap<>();
-        HashMap<Integer, Integer> connectionsCount = new HashMap<>();
-        HashMap<Integer, byte[]> displayInfoMap = new HashMap<>();
-        HashMap<Integer, byte[]> videoSettingsBytesMap = new HashMap<>();
-        HashMap<Integer, byte[]> screenInfoBytesMap = new HashMap<>();
-
+        List<DisplayInfo> displays = new ArrayList<>();
         for (int displayId : displayIds) {
             DisplayInfo displayInfo = Device.getDisplayInfo(displayId);
             displayInfoHashMap.put(displayId, displayInfo);
-            byte[] displayInfoBytes = displayInfo.toByteArray();
-            additionalLength += displayInfoBytes.length;
-            displayInfoMap.put(displayId, displayInfoBytes);
+            displays.add(displayInfo);
             WebSocketConnection connection = WSServer.getConnectionForDisplay(displayId);
-            additionalLength += 4; // for connection.connections.size()
-            additionalLength += 4; // for screenInfoBytes.length
-            additionalLength += 4; // for videoSettingsBytes.length
-            if (connection != null) {
-                connectionsCount.put(displayId, connection.sockets.size());
-                byte[] screenInfoBytes = connection.getDevice().getScreenInfo().toByteArray();
-                additionalLength += screenInfoBytes.length;
-                screenInfoBytesMap.put(displayId, screenInfoBytes);
-                byte[] videoSettingsBytes = connection.getVideoSettings().toByteArray();
-                additionalLength += videoSettingsBytes.length;
-                videoSettingsBytesMap.put(displayId, videoSettingsBytes);
+            if(connection != null) {
+                initialInfo.put("screenInfo", connection.getDevice().getScreenInfo());
             }
         }
-
         MediaCodecInfo[] encoders = ScreenEncoder.listEncoders();
-        List<byte[]> encodersNames = new ArrayList<>();
-        if (encoders != null && encoders.length > 0) {
-            additionalLength += 4;
-            for (MediaCodecInfo encoder : encoders) {
-                byte[] nameBytes = encoder.getName().getBytes(StandardCharsets.UTF_8);
-                additionalLength += 4 + nameBytes.length;
-                encodersNames.add(nameBytes);
-            }
-        }
-
-        byte[] fullBytes = new byte[baseLength + additionalLength];
-        ByteBuffer initialInfo = ByteBuffer.wrap(fullBytes);
-        initialInfo.put(MAGIC_BYTES_INITIAL);
-        initialInfo.put(DEVICE_NAME_BYTES, 0, Math.min(DEVICE_NAME_FIELD_LENGTH - 1, DEVICE_NAME_BYTES.length));
-        initialInfo.position(MAGIC_BYTES_INITIAL.length + DEVICE_NAME_FIELD_LENGTH);
-        initialInfo.putInt(displayIds.length);
-        for (DisplayInfo displayInfo : displayInfoHashMap.values()) {
-            int displayId = displayInfo.getDisplayId();
-            if (displayInfoMap.containsKey(displayId)) {
-                initialInfo.put(displayInfoMap.get(displayId));
-            }
-            int count = 0;
-            if (connectionsCount.containsKey(displayId)) {
-                count = connectionsCount.get(displayId);
-            }
-            initialInfo.putInt(count);
-            if (screenInfoBytesMap.containsKey(displayId)) {
-                byte[] screenInfo = screenInfoBytesMap.get(displayId);
-                initialInfo.putInt(screenInfo.length);
-                initialInfo.put(screenInfo);
-            } else {
-                initialInfo.putInt(0);
-            }
-            if (videoSettingsBytesMap.containsKey(displayId)) {
-                byte[] videoSettings = videoSettingsBytesMap.get(displayId);
-                initialInfo.putInt(videoSettings.length);
-                initialInfo.put(videoSettings);
-            } else {
-                initialInfo.putInt(0);
-            }
-        }
-        initialInfo.putInt(encodersNames.size());
-        for (byte[] encoderNameBytes : encodersNames) {
-            initialInfo.putInt(encoderNameBytes.length);
-            initialInfo.put(encoderNameBytes);
-        }
+        initialInfo.put("displays", displays);
+        initialInfo.put("encoders", Arrays.asList(encoders));
 
         return initialInfo;
     }
@@ -203,6 +168,7 @@ public class WebSocketConnection extends Connection {
     }
 
     private void release() {
+
         WSServer.releaseConnectionForDisplay(this.videoSettings.getDisplayId());
         // encoder will stop itself after checking .hasConnections()
     }
