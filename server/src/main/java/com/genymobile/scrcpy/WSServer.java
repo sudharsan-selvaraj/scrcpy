@@ -116,6 +116,7 @@ public class WSServer extends WebSocketServer {
                 VideoSettings videoSettings = new VideoSettings();
                 videoSettings.setDisplayId(0);
                 videoSettings.setSendFrameMeta(false);
+                videoSettings.setBounds(new Size(800, 800));
                    joinStreamForDisplayId(webSocket, videoSettings, options, videoSettings.getDisplayId(), this);
                    return;
             } else {
