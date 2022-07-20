@@ -186,7 +186,7 @@ public final class Device {
         if (displayId != 0 && !InputManager.setDisplayId(inputEvent, displayId)) {
             return false;
         }
-
+        Ln.i("Injecting touch event");
         return SERVICE_MANAGER.getInputManager().injectInputEvent(inputEvent, InputManager.INJECT_INPUT_EVENT_MODE_ASYNC);
     }
 

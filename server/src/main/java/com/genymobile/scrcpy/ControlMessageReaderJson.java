@@ -85,7 +85,7 @@ public class ControlMessageReaderJson {
         int pressureInt = Integer.parseInt(msg.get("pressure"));
         // convert it to a float between 0 and 1 (0x1p16f is 2^16 as float)
         float pressure = pressureInt == 0xffff ? 1f : (pressureInt / 0x1p16f);
-        int buttons = Integer.parseInt(msg.get("button"));
+        int buttons = Integer.parseInt(msg.get("buttons"));
         return ControlMessage.createInjectTouchEvent(action, pointerId, position, pressure, buttons);
     }
 

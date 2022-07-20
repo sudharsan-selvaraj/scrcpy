@@ -13,6 +13,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
 public class WebSocketConnection extends Connection {
     private static final byte[] MAGIC_BYTES_INITIAL = "scrcpy_initial".getBytes(StandardCharsets.UTF_8);
@@ -107,8 +108,12 @@ public class WebSocketConnection extends Connection {
     public static void sendInitialInfo(HashMap initialInfo, WebSocket webSocket, int clientId) {
         initialInfo.put("clientId", clientId);
         ObjectMapper mapper = new ObjectMapper();
+        Map<String, Object> msg = new HashMap<String, Object>(){{
+            put("message" , "device_info");
+            put("data", initialInfo);
+        }};
         try {
-            webSocket.send(mapper.writeValueAsString(initialInfo));
+            webSocket.send(mapper.writeValueAsString(msg));
         } catch (Exception e) {}
     }
 

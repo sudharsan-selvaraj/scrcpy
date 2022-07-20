@@ -80,7 +80,7 @@ public class WSServer extends WebSocketServer {
             }
             SocketInfo info = new SocketInfo(clientId);
             webSocket.setAttachment(info);
-            WebSocketConnection.sendInitialInfo(WebSocketConnection.getInitialInfo(), webSocket, clientId);
+            //WebSocketConnection.sendInitialInfo(WebSocketConnection.getInitialInfo(), webSocket, clientId);
             Ln.d("Client entered the room!");
         }
     }
@@ -117,7 +117,7 @@ public class WSServer extends WebSocketServer {
                 videoSettings.setDisplayId(0);
                 videoSettings.setSendFrameMeta(false);
                 videoSettings.setBounds(new Size(800, 800));
-                   joinStreamForDisplayId(webSocket, videoSettings, options, videoSettings.getDisplayId(), this);
+                joinStreamForDisplayId(webSocket, videoSettings, options, videoSettings.getDisplayId(), this);
                    return;
             } else {
                 ControlMessage controlMessage = reader.parseEvent(parseMessage);
@@ -129,7 +129,7 @@ public class WSServer extends WebSocketServer {
 
 
         } catch (Exception e) {
-            Ln.i(e.getMessage());
+            Ln.e(e.getMessage(), e);
         }
     }
 
